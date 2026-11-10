@@ -63,7 +63,9 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
 .volrow input{flex:1;min-width:0;height:32px;accent-color:#29f3ff;touch-action:none;margin:0}
 .volrow input:disabled{opacity:0.4}
 .volrow span{font-size:9px;width:40px;text-align:right;color:#b9a6ff}
-@media (prefers-reduced-motion: reduce){.lineup img{animation:none}}
+.snd-hint{font-size:9px;color:#ffd23f;margin:-6px 0 10px;animation:blink 1s steps(2) infinite}
+@keyframes blink{to{opacity:0.25}}
+@media (prefers-reduced-motion: reduce){.snd-hint{animation:none}.lineup img{animation:none}}
 </style>
 </head>
 <body>
@@ -74,6 +76,7 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
   <button id="cogBtn" aria-label="Sound settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M10 1h4l.6 3.1 1.9.8 2.6-1.8 2.8 2.8-1.8 2.6.8 1.9L23 10v4l-3.1.6-.8 1.9 1.8 2.6-2.8 2.8-2.6-1.8-1.9.8L14 23h-4l-.6-3.1-1.9-.8-2.6 1.8-2.8-2.8 1.8-2.6-.8-1.9L1 14v-4l3.1-.6.8-1.9-1.8-2.6 2.8-2.8 2.6 1.8 1.9-.8zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg></button>
   <h1 class="title" aria-label="Zooburg"><span style="color:#ff3cf0">Z</span><span style="color:#ffd23f">O</span><span style="color:#29f3ff">O</span><span style="color:#3cff8a">B</span><span style="color:#ff9a1f">U</span><span style="color:#c46bff">R</span><span style="color:#ff3cf0">G</span></h1>
   <div class="tag">Hop the cubes. Paint the zoo. Steal the bridge.</div>
+  <div id="sndHint" class="snd-hint" style="visibility:hidden">Tap anywhere for sound</div>
   <div class="lineup" id="lineup"></div>
   <div class="btns">
     <button class="btn" data-mode="pyramid" style="border-color:#ffd23f;box-shadow:0 0 12px #ffd23f">Classic pyramid<small>1 player, portrait</small></button>
@@ -191,11 +194,17 @@ function saveSet(){try{localStorage.setItem('zooburg-audio',JSON.stringify(SET))
 function audioInit(){
  try{
   if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(C){AC=new C();
-   sfxBus=AC.createGain();sfxBus.connect(AC.destination);musicBus=AC.createGain();musicBus.connect(AC.destination);applyVolumes(true);}}
-  if(AC&&AC.state==='suspended'&&!document.hidden)AC.resume();
+   sfxBus=AC.createGain();sfxBus.connect(AC.destination);musicBus=AC.createGain();musicBus.connect(AC.destination);applyVolumes(true);AC.onstatechange=updSoundHint;}}
+  if(AC&&AC.state!=='running'&&!document.hidden){
+   var pr=AC.resume();if(pr&&pr.catch)pr.catch(function(){});
+   // iOS only unlocks audio when a sound is started inside the tap itself
+   var sb=AC.createBufferSource();sb.buffer=AC.createBuffer(1,1,22050);sb.connect(AC.destination);sb.start(0);
+  }
   if(AC&&MUS.want&&!MUS.cur)setMusic(MUS.want);
  }catch(e){}
+ updSoundHint();
 }
+function updSoundHint(){var h=document.getElementById('sndHint');if(h)h.style.visibility=(AC&&AC.state!=='running'&&SET.music)?'visible':'hidden';}
 function applyVolumes(now){
  if(!AC)return;var t=AC.currentTime;
  var sv=SET.sfx?SET.sv*SET.sv*1.6:0,mv=SET.music?SET.mv*SET.mv*1.6*duck:0;
@@ -1221,11 +1230,11 @@ function init(){
  document.getElementById('btnQuit').addEventListener('click',function(){cubeList=[];showScreen('menu');});
  document.getElementById('pauseBtn').addEventListener('click',function(){pauseGame();});
  document.addEventListener('visibilitychange',function(){if(document.hidden){pauseGame();try{if(AC)AC.suspend();}catch(e){}}else{try{if(AC)AC.resume();}catch(e){}}});
- ['pointerdown','touchend','keydown'].forEach(function(t){document.addEventListener(t,audioInit,true);});
+ ['pointerdown','pointerup','touchstart','touchend','mousedown','click','keydown'].forEach(function(t){document.addEventListener(t,audioInit,true);});
  document.getElementById('cogBtn').addEventListener('click',function(){audioInit();openSettings();});
  document.getElementById('btnSettings').addEventListener('click',function(){openSettings();});
  document.getElementById('setBack').addEventListener('click',function(){closeSettings();});
- document.getElementById('togMusic').addEventListener('click',function(){SET.music=!SET.music;saveSet();syncSettings();applyVolumes();});
+ document.getElementById('togMusic').addEventListener('click',function(){SET.music=!SET.music;saveSet();syncSettings();applyVolumes();updSoundHint();});
  document.getElementById('togSfx').addEventListener('click',function(){SET.sfx=!SET.sfx;saveSet();syncSettings();applyVolumes();if(SET.sfx)sfx('flip');});
  document.getElementById('volMusic').addEventListener('input',function(){SET.mv=this.value/100;syncSettings();applyVolumes();});
  document.getElementById('volSfx').addEventListener('input',function(){SET.sv=this.value/100;syncSettings();applyVolumes();});
@@ -1248,7 +1257,7 @@ function init(){
   if(now-lastTapEnd<350&&e.changedTouches.length===1&&!(t&&t.closest&&t.closest('button,a,input,select,textarea,.pad')))e.preventDefault();
   lastTapEnd=now;},{passive:false});
  updZoom();
- resize();showScreen('menu');requestAnimationFrame(loop);
+ resize();showScreen('menu');audioInit();requestAnimationFrame(loop);
 }
 init();
 })();
