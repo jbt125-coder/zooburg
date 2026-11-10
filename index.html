@@ -52,6 +52,17 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
 .a-down:after{border-top-color:#ffffff;margin:0 0 0 -6px}
 .a-left:after{border-right-color:#ffffff;margin:-6px 0 0 -12px}
 .a-right:after{border-left-color:#ffffff;margin:-6px 0 0 0}
+#cogBtn{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);width:44px;height:44px;padding:6px;background:#160733;border:2px solid #29f3ff;border-radius:4px;box-shadow:0 0 10px #29f3ff;cursor:pointer;color:#29f3ff}
+#cogBtn svg{width:100%;height:100%;display:block}
+.setbox{width:100%;max-width:300px;margin:0 auto 10px;text-align:left}
+.setrow{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px}
+.setlbl{font-size:11px}
+.tog{font-family:inherit;font-size:10px;width:64px;padding:8px 0;color:#07021a;background:#3cff8a;border:2px solid #3cff8a;border-radius:4px;box-shadow:0 0 8px #3cff8a;cursor:pointer}
+.tog[aria-pressed="false"]{color:#b9a6ff;background:#160733;border-color:#5a4a90;box-shadow:none}
+.volrow{display:flex;align-items:center;gap:10px}
+.volrow input{flex:1;min-width:0;height:32px;accent-color:#29f3ff;touch-action:none;margin:0}
+.volrow input:disabled{opacity:0.4}
+.volrow span{font-size:9px;width:40px;text-align:right;color:#b9a6ff}
 @media (prefers-reduced-motion: reduce){.lineup img{animation:none}}
 </style>
 </head>
@@ -60,6 +71,7 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
 <div id="safe"></div>
 
 <div id="menu" class="screen" style="display:none">
+  <button id="cogBtn" aria-label="Sound settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M10 1h4l.6 3.1 1.9.8 2.6-1.8 2.8 2.8-1.8 2.6.8 1.9L23 10v4l-3.1.6-.8 1.9 1.8 2.6-2.8 2.8-2.6-1.8-1.9.8L14 23h-4l-.6-3.1-1.9-.8-2.6 1.8-2.8-2.8 1.8-2.6-.8-1.9L1 14v-4l3.1-.6.8-1.9-1.8-2.6 2.8-2.8 2.6 1.8 1.9-.8zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg></button>
   <h1 class="title" aria-label="Zooburg"><span style="color:#ff3cf0">Z</span><span style="color:#ffd23f">O</span><span style="color:#29f3ff">O</span><span style="color:#3cff8a">B</span><span style="color:#ff9a1f">U</span><span style="color:#c46bff">R</span><span style="color:#ff3cf0">G</span></h1>
   <div class="tag">Hop the cubes. Paint the zoo. Steal the bridge.</div>
   <div class="lineup" id="lineup"></div>
@@ -90,8 +102,20 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
   <h2>Paused</h2>
   <div class="btns">
     <button class="btn" id="btnResume">Resume</button>
+    <button class="btn" id="btnSettings" style="border-color:#ffd23f;box-shadow:0 0 12px #ffd23f">Sound settings</button>
     <button class="btn" id="btnQuit" style="border-color:#ff3cf0;box-shadow:0 0 12px #ff3cf0">Main menu</button>
   </div>
+</div>
+
+<div id="settings" class="screen dim" style="display:none">
+  <h2>Sound settings</h2>
+  <div class="setbox">
+    <div class="setrow"><span class="setlbl" id="lblMusic">Music</span><button class="tog" id="togMusic" aria-labelledby="lblMusic">ON</button></div>
+    <div class="volrow"><input type="range" id="volMusic" min="0" max="100" step="5" aria-label="Music volume"><span id="valMusic"></span></div>
+    <div class="setrow"><span class="setlbl" id="lblSfx">Sound FX</span><button class="tog" id="togSfx" aria-labelledby="lblSfx">ON</button></div>
+    <div class="volrow"><input type="range" id="volSfx" min="0" max="100" step="5" aria-label="Sound effects volume"><span id="valSfx"></span></div>
+  </div>
+  <div class="btns"><button class="btn" id="setBack">Back</button></div>
 </div>
 
 <button id="pauseBtn" style="display:none" aria-label="Pause">II</button>
@@ -160,12 +184,29 @@ function buildSprite(def){
 function bigSprite(c,s){var b=document.createElement('canvas');b.width=16*s;b.height=16*s;var g=b.getContext('2d');g.imageSmoothingEnabled=false;g.webkitImageSmoothingEnabled=false;g.drawImage(c,0,0,b.width,b.height);return b;}
 
 /* ================= AUDIO ================= */
-var AC=null;
-function audioInit(){try{if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(C)AC=new C();}if(AC&&AC.state==='suspended')AC.resume();}catch(e){}}
+var AC=null,musicBus=null,sfxBus=null,duck=1;
+var SET={music:true,sfx:true,mv:0.5,sv:0.8};
+(function(){try{var s=JSON.parse(localStorage.getItem('zooburg-audio')||'null');if(s){for(var k in SET){if(typeof s[k]===typeof SET[k])SET[k]=s[k];}}}catch(e){}})();
+function saveSet(){try{localStorage.setItem('zooburg-audio',JSON.stringify(SET));}catch(e){}}
+function audioInit(){
+ try{
+  if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(C){AC=new C();
+   sfxBus=AC.createGain();sfxBus.connect(AC.destination);musicBus=AC.createGain();musicBus.connect(AC.destination);applyVolumes(true);}}
+  if(AC&&AC.state==='suspended'&&!document.hidden)AC.resume();
+  if(AC&&MUS.want&&!MUS.cur)setMusic(MUS.want);
+ }catch(e){}
+}
+function applyVolumes(now){
+ if(!AC)return;var t=AC.currentTime;
+ var sv=SET.sfx?SET.sv*SET.sv*1.6:0,mv=SET.music?SET.mv*SET.mv*1.6*duck:0;
+ if(now){sfxBus.gain.value=sv;musicBus.gain.value=mv;return;}
+ sfxBus.gain.cancelScheduledValues(t);sfxBus.gain.setTargetAtTime(sv,t,0.03);
+ musicBus.gain.cancelScheduledValues(t);musicBus.gain.setTargetAtTime(mv,t,0.08);
+}
 function tone(f1,f2,dur,type,vol,delay){
- if(!AC)return;var t=AC.currentTime+(delay||0);var o=AC.createOscillator(),g=AC.createGain();
+ if(!AC||!SET.sfx)return;var t=AC.currentTime+(delay||0);var o=AC.createOscillator(),g=AC.createGain();
  o.type=type||'square';o.frequency.setValueAtTime(f1,t);if(f2!==f1)o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t+dur);
- g.gain.setValueAtTime(vol||0.05,t);g.gain.exponentialRampToValueAtTime(0.0008,t+dur);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+dur+0.05);
+ g.gain.setValueAtTime(vol||0.05,t);g.gain.exponentialRampToValueAtTime(0.0008,t+dur);o.connect(g);g.connect(sfxBus);o.start(t);o.stop(t+dur+0.05);
 }
 function arp(fs,step,type,vol){for(var i=0;i<fs.length;i++)tone(fs[i],fs[i],step*1.4,type,vol,i*step);}
 function sfx(n){
@@ -196,6 +237,117 @@ function sfx(n){
  else if(n==='win')arp([523,659,784,1047,784,1047,1319],0.11,'square',0.05);
  else if(n==='clear')arp([659,784,988,1319],0.08,'triangle',0.07);
  else if(n==='go')arp([440,660],0.12,'square',0.04);
+}
+
+/* ================= MUSIC ================= */
+// Original chiptune generated from a seed. Tier 0 = chill, 3 = fastest/busiest.
+var MUS={cur:null,want:null,timer:null,waves:{},noise:null};
+var SCALES={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10]};
+var PROGS={major:[[0,5,3,4],[0,3,4,3],[0,4,5,3],[5,3,0,4],[0,2,3,4],[3,4,0,0]],minor:[[0,5,2,6],[0,6,5,6],[0,3,6,2],[5,6,0,0],[0,5,3,4]]};
+var RHY=[
+[ [[0,6],[6,2],[8,4],[12,4]],[[0,3],[3,5],[8,8]],[[2,2],[4,4],[8,2],[10,6]],[[0,10],[10,2],[12,4]],[[0,4],[6,2],[8,6]],[[0,2],[2,6],[12,4]]],
+[ [[0,2],[2,2],[4,4],[8,2],[10,2],[12,4]],[[0,3],[3,3],[6,2],[8,4],[12,2],[14,2]],[[0,4],[4,2],[6,2],[8,6],[14,2]],[[0,2],[4,2],[6,4],[10,2],[12,4]]],
+[ [[0,2],[2,2],[4,2],[6,2],[8,2],[10,1],[11,1],[12,4]],[[0,1],[1,1],[2,2],[4,2],[6,2],[8,4],[12,2],[14,2]],[[0,2],[3,1],[4,2],[6,2],[8,2],[10,2],[12,2],[14,2]],[[0,3],[3,3],[6,2],[8,1],[9,1],[10,2],[12,4]]],
+[ [[0,1],[1,1],[2,1],[3,1],[4,2],[6,2],[8,1],[9,1],[10,1],[11,1],[12,2],[14,2]],[[0,2],[2,1],[3,1],[4,1],[5,1],[6,2],[8,2],[10,1],[11,1],[12,1],[13,1],[14,1],[15,1]],[[0,1],[1,1],[2,2],[4,1],[5,1],[6,2],[8,1],[9,1],[10,2],[12,1],[13,1],[14,2]]]
+];
+function rng(seed){var a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;var t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+function levelSpec(lv){
+ var c=(lv-1)%5,cyc=Math.floor((lv-1)/5),tier=[0,1,2,3,0][c];
+ var keys=[0,5,-3,2,-5],root=((keys[c]+cyc*2)%12+12)%12;if(root>6)root-=12;
+ return {id:'lv'+lv,tier:tier,remix:c===4,seed:lv*7919+13,bpm:[82,104,124,146][tier]+(c===4?8:0)+Math.min(cyc,4)*6,root:root,mode:tier>=2?'minor':'major'};
+}
+var MENU_SPEC={id:'menu',tier:0,remix:true,seed:4242,bpm:90,root:-3,mode:'major'};
+function buildSong(sp){
+ var R=rng(sp.seed),sc=SCALES[sp.mode],pr=PROGS[sp.mode],prog=pr[Math.floor(R()*pr.length)];
+ var chords=prog.concat(prog),mel=[],rhy=RHY[sp.tier],i,b;
+ var bars=[];for(b=0;b<4;b++)bars.push(rhy[Math.floor(R()*rhy.length)]);
+ var cur=7+Math.floor(R()*3);
+ function isCT(idx,ch){var d=((idx-ch)%7+7)%7;return d===0||d===2||d===4;}
+ function genBar(bar,ch,cad){
+  var out=[],rh=bars[bar];
+  for(var j=0;j<rh.length;j++){var st=rh[j][0],du=rh[j][1];
+   if(cad&&j===rh.length-1){var best=cur,bd=99;for(var q=4;q<=14;q++){if(((q%7)+7)%7===0&&Math.abs(q-cur)<bd){bd=Math.abs(q-cur);best=q;}}cur=best;du=Math.max(du,4);}
+   else if(st%4===0){var opts=[];for(var q2=cur-4;q2<=cur+4;q2++){if(q2>=4&&q2<=14&&isCT(q2,ch))opts.push(q2);}cur=opts.length?opts[Math.floor(R()*opts.length)]:cur;}
+   else{var stp=R()<0.7?(R()<0.5?1:-1):(R()<0.5?2:-2);cur=Math.max(4,Math.min(14,cur+stp));}
+   out.push([st,du,cur]);}
+  return out;
+ }
+ var A=[genBar(0,chords[0]),genBar(1,chords[1]),genBar(0,chords[2]),genBar(2,chords[3],false)];
+ var B=[A[0],A[1],genBar(0,chords[6]),genBar(3,chords[7],true)];
+ var all=A.concat(B);
+ for(b=0;b<8;b++){for(i=0;i<all[b].length;i++)mel.push([b*16+all[b][i][0],all[b][i][1],all[b][i][2]]);}
+ var ms=[];for(i=0;i<mel.length;i++){ms[mel[i][0]]=mel[i];}
+ return {sp:sp,sc:sc,chords:chords,mel:ms,len:128,sd:60/sp.bpm/4,swing:sp.tier===0?0.18:(sp.tier===1?0.08:0)};
+}
+function midiOf(song,idx,oct){var sc=song.sc,o=Math.floor(idx/7),d=((idx%7)+7)%7;return 48+song.sp.root+(oct||0)*12+o*12+sc[d];}
+function hz(m){return 440*Math.pow(2,(m-69)/12);}
+function pulseWave(d){
+ if(MUS.waves[d])return MUS.waves[d];var n=32,re=new Float32Array(n),im=new Float32Array(n);
+ for(var k=1;k<n;k++){re[k]=Math.sin(2*Math.PI*k*d)/(k*Math.PI);im[k]=(1-Math.cos(2*Math.PI*k*d))/(k*Math.PI);}
+ return MUS.waves[d]=AC.createPeriodicWave(re,im);
+}
+function mnote(out,m,t,dur,wave,vol,att,vib){
+ var o=AC.createOscillator(),g=AC.createGain();
+ if(typeof wave==='number')o.setPeriodicWave(pulseWave(wave));else o.type=wave;
+ o.frequency.setValueAtTime(hz(m),t);
+ if(vib&&dur>0.3){var l=AC.createOscillator(),lg=AC.createGain();l.frequency.value=5;lg.gain.setValueAtTime(0,t);lg.gain.linearRampToValueAtTime(hz(m)*0.012,t+dur*0.6);l.connect(lg);lg.connect(o.frequency);l.start(t);l.stop(t+dur+0.05);}
+ att=att||0.005;g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+att);
+ g.gain.setValueAtTime(vol,t+Math.max(att,dur*0.6));g.gain.exponentialRampToValueAtTime(0.0005,t+dur);
+ o.connect(g);g.connect(out);o.start(t);o.stop(t+dur+0.05);
+}
+function noiseBuf(){if(MUS.noise)return MUS.noise;var b=AC.createBuffer(1,AC.sampleRate,AC.sampleRate),d=b.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1;return MUS.noise=b;}
+function drum(out,kind,t,vol){
+ if(kind==='k'){var o=AC.createOscillator(),g=AC.createGain();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(42,t+0.12);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.18);o.connect(g);g.connect(out);o.start(t);o.stop(t+0.2);return;}
+ var s=AC.createBufferSource(),f=AC.createBiquadFilter(),g2=AC.createGain(),len=kind==='h'?0.04:(kind==='o'?0.16:0.14);
+ s.buffer=noiseBuf();f.type=kind==='s'?'bandpass':'highpass';f.frequency.value=kind==='s'?1700:7000;
+ g2.gain.setValueAtTime(vol,t);g2.gain.exponentialRampToValueAtTime(0.001,t+len);s.connect(f);f.connect(g2);g2.connect(out);s.start(t,Math.random()*0.5);s.stop(t+len+0.02);
+}
+function playStep(song,s,t,out){
+ if(!SET.music)return;
+ var sp=song.sp,tier=sp.tier,sd=song.sd,bar=Math.floor(s/16),st=s%16,ch=song.chords[bar%8],i;
+ var m=song.mel[s];
+ if(m){var lw=[0.5,0.25,0.25,0.125][tier],lv=[0.05,0.045,0.04,0.038][tier];
+  mnote(out,midiOf(song,m[2],1),t,m[1]*sd*0.95,tier===0?'triangle':lw,tier===0?lv*1.6:lv,tier===0?0.03:0.005,tier<2);
+  if(tier===3)mnote(out,midiOf(song,m[2]-2,1),t,m[1]*sd*0.9,0.5,0.018);
+  if(sp.remix||tier>=2)mnote(out,midiOf(song,m[2],1),t+sd*3,m[1]*sd*0.8,tier===0?'triangle':0.5,tier===0?0.025:0.012);
+ }
+ var rootM=midiOf(song,ch,-1);
+ if(tier===0){if(st===0)mnote(out,rootM,t,sd*7,'triangle',0.13,0.02);if(st===8)mnote(out,midiOf(song,ch+4,-1),t,sd*5,'triangle',0.11,0.02);if(st===14&&bar%2)mnote(out,midiOf(song,ch+2,-1),t,sd*2,'triangle',0.09);}
+ else if(tier===1){if(st%4===0){var bn=[0,4,7,4][st/4];mnote(out,midiOf(song,ch+bn,-1),t,sd*3,'triangle',0.13);}if(st===14)mnote(out,midiOf(song,ch+1,-1),t,sd*1.5,'triangle',0.1);}
+ else if(tier===2){if(st%2===0)mnote(out,rootM+(st%4===2?12:0),t,sd*1.6,'triangle',0.13);}
+ else{var pat=[0,0,12,0,0,12,0,7,0,0,12,0,7,0,12,10];mnote(out,rootM+pat[st],t,sd*0.9,'triangle',0.13);}
+ var ct=[ch,ch+2,ch+4,ch+6];
+ if(tier===0&&st===0){for(i=0;i<4;i++)mnote(out,midiOf(song,ct[i]+7,0),t,sd*15,i===3?'sine':'triangle',0.022,0.25);}
+ if(tier===1&&(st===4||st===12)){for(i=0;i<3;i++)mnote(out,midiOf(song,ct[i]+7,0),t,sd*1.5,0.5,0.014);}
+ if(tier===2&&st%4===2){for(i=0;i<3;i++)mnote(out,midiOf(song,ct[i]+7,0),t,sd*1,0.25,0.012);}
+ if(tier>=2||(sp.remix&&st%2===0)){var ap=tier===3?[0,1,2,3,2,1]:[0,1,2,1],n=ap[st%ap.length];mnote(out,midiOf(song,ct[n]+14,0),t,sd*0.8,tier===0?'sine':0.25,tier===0?0.016:0.011);}
+ var K=[[0,10],[0,8],[0,6,8],[0,4,8,10,12]][tier],S=[[4,12],[4,12],[4,12],[4,12]][tier];
+ if(K.indexOf(st)>=0)drum(out,'k',t,tier===0?0.22:0.3);
+ if(S.indexOf(st)>=0)drum(out,'s',t,tier===0?0.05:0.09);
+ if(tier===3&&bar%4===3&&st>=12)drum(out,'s',t,0.05+0.015*(st-12));
+ if(tier===0?(st%4===2):(tier===1?st%2===0:true))drum(out,'h',t,tier===0?0.025:(st%4===2?0.04:0.022));
+ if(tier===3&&st%4===2)drum(out,'o',t,0.025);
+}
+function musicTick(){
+ var c=MUS.cur;if(!AC||!c)return;var now=AC.currentTime;
+ if(c.next<now-0.1)c.next=now+0.05;
+ while(c.next<now+0.2){var s=c.step%c.song.len,sw=(s%4===2)?c.song.swing*c.song.sd:0;
+  try{playStep(c.song,s,c.next+sw,c.out);}catch(e){}
+  c.next+=c.song.sd;c.step++;}
+}
+function fadeOut(c){if(!c)return;var t=AC.currentTime;c.out.gain.cancelScheduledValues(t);c.out.gain.setValueAtTime(c.out.gain.value,t);c.out.gain.linearRampToValueAtTime(0,t+0.6);setTimeout(function(){try{c.out.disconnect();}catch(e){}},1200);}
+function setMusic(sp){
+ MUS.want=sp;if(!AC)return;if(MUS.cur&&MUS.cur.id===sp.id)return;
+ fadeOut(MUS.cur);var out=AC.createGain();out.gain.value=0;out.gain.linearRampToValueAtTime(1,AC.currentTime+0.4);out.connect(musicBus);
+ MUS.cur={id:sp.id,song:buildSong(sp),out:out,step:0,next:AC.currentTime+0.08};
+ if(!MUS.timer)MUS.timer=setInterval(musicTick,25);musicTick();
+}
+function stopMusic(){MUS.want=null;if(!AC)return;fadeOut(MUS.cur);MUS.cur=null;}
+function jingle(kind){
+ if(!AC||!SET.music)return;var out=AC.createGain();out.connect(musicBus);var t=AC.currentTime+0.35,i;
+ if(kind==='win'){var w=[60,64,67,72,67,72,76,79],wd=[1,1,1,2,1,1,2,6];var tt=t;for(i=0;i<w.length;i++){mnote(out,w[i]+12,tt,wd[i]*0.11,0.25,0.05);mnote(out,w[i]-12,tt,wd[i]*0.11,'triangle',0.12);tt+=wd[i]*0.11;}drum(out,'k',t,0.3);drum(out,'s',tt-0.66,0.08);}
+ else{var l=[67,66,65,64,60,55,48],ld=[2,2,2,4,2,2,8];var t2=t;for(i=0;i<l.length;i++){mnote(out,l[i]+12,t2,ld[i]*0.16,0.5,0.05,0.01,true);mnote(out,l[i]-12,t2,ld[i]*0.16,'triangle',0.11);t2+=ld[i]*0.16;}}
+ setTimeout(function(){try{out.disconnect();}catch(e){}},5000);
 }
 
 /* ================= STATE ================= */
@@ -440,7 +592,7 @@ function beginBoard(){
 function nextBoard(){
  round++;if(round>3){round=1;level++;players[0].lives=Math.min(5,players[0].lives+1);}
  boardNum++;styleIdx++;CUBE={};
- beginBoard();
+ beginBoard();setMusic(levelSpec(level));
  var p=players[0];p.r=0;p.x=0;p.state='idle';startDrop(p);
 }
 function afterFall(p){
@@ -682,7 +834,7 @@ function startGame(advance){
  for(var i=0;i<players.length;i++)startDrop(players[i]);
  padDir=[null,null];
  document.getElementById('btnRematch').textContent=MODE==='pyramid'?'Play again':'Next match';
- showScreen('play');sfx('go');
+ showScreen('play');sfx('go');setMusic(levelSpec(level));
 }
 function nameOf(p){return ANIMALS[p.animal].name;}
 function endGame(){
@@ -702,6 +854,7 @@ function endGame(){
  }
  document.getElementById('overBody').innerHTML=html;
  showScreen('over');sfx(MODE==='pyramid'?'hit':'win');
+ stopMusic();jingle(MODE==='pyramid'||(MODE==='cpu'&&c2>c1)?'lose':'win');
 }
 function doRematch(){startGame(MODE!=='pyramid');}
 
@@ -718,6 +871,7 @@ window.addEventListener('keydown',function(ev){
   if(idx>=0&&players[idx]&&!players[idx].cpu)players[idx].buf=d;
  }
  keys[c]=true;
+ if(c==='Escape'&&SCREEN==='settings'){closeSettings();return;}
  if(c==='Escape'||c==='KeyP'){if(SCREEN==='play')pauseGame();else if(SCREEN==='pause')resumeGame();}
  if(c==='Enter'&&SCREEN==='over')doRematch();
 });
@@ -777,10 +931,21 @@ function layoutPads(){
 
 /* ================= SCREENS ================= */
 function showScreen(n){
- var ids=['menu','select','over','pause'];
+ var ids=['menu','select','over','pause','settings'];
  for(var i=0;i<ids.length;i++)document.getElementById(ids[i]).style.display=(ids[i]===n)?'flex':'none';
  SCREEN=n;if(n!=='play'){setPad(0,null);setPad(1,null);}
+ if(n==='menu'||n==='select')setMusic(MENU_SPEC);
+ duck=(n==='pause'||(n==='settings'&&setFrom==='pause'))?0.35:1;applyVolumes();
  layoutPads();
+}
+var setFrom='menu';
+function openSettings(){setFrom=SCREEN;syncSettings();showScreen('settings');}
+function closeSettings(){if(SCREEN==='settings')showScreen(setFrom);}
+function syncSettings(){
+ var rows=[['Music','music','mv'],['Sfx','sfx','sv']];
+ for(var i=0;i<rows.length;i++){var r=rows[i],on=SET[r[1]],tg=document.getElementById('tog'+r[0]),sl=document.getElementById('vol'+r[0]);
+  tg.textContent=on?'ON':'OFF';tg.setAttribute('aria-pressed',on?'true':'false');
+  sl.value=Math.round(SET[r[2]]*100);sl.disabled=!on;document.getElementById('val'+r[0]).textContent=Math.round(SET[r[2]]*100)+'%';}
 }
 function pauseGame(){if(SCREEN==='play')showScreen('pause');}
 function resumeGame(){if(SCREEN==='pause')showScreen('play');}
@@ -1055,7 +1220,17 @@ function init(){
  document.getElementById('btnResume').addEventListener('click',function(){resumeGame();});
  document.getElementById('btnQuit').addEventListener('click',function(){cubeList=[];showScreen('menu');});
  document.getElementById('pauseBtn').addEventListener('click',function(){pauseGame();});
- document.addEventListener('visibilitychange',function(){if(document.hidden)pauseGame();});
+ document.addEventListener('visibilitychange',function(){if(document.hidden){pauseGame();try{if(AC)AC.suspend();}catch(e){}}else{try{if(AC)AC.resume();}catch(e){}}});
+ ['pointerdown','touchend','keydown'].forEach(function(t){document.addEventListener(t,audioInit,true);});
+ document.getElementById('cogBtn').addEventListener('click',function(){audioInit();openSettings();});
+ document.getElementById('btnSettings').addEventListener('click',function(){openSettings();});
+ document.getElementById('setBack').addEventListener('click',function(){closeSettings();});
+ document.getElementById('togMusic').addEventListener('click',function(){SET.music=!SET.music;saveSet();syncSettings();applyVolumes();});
+ document.getElementById('togSfx').addEventListener('click',function(){SET.sfx=!SET.sfx;saveSet();syncSettings();applyVolumes();if(SET.sfx)sfx('flip');});
+ document.getElementById('volMusic').addEventListener('input',function(){SET.mv=this.value/100;syncSettings();applyVolumes();});
+ document.getElementById('volSfx').addEventListener('input',function(){SET.sv=this.value/100;syncSettings();applyVolumes();});
+ document.getElementById('volMusic').addEventListener('change',saveSet);
+ document.getElementById('volSfx').addEventListener('change',function(){saveSet();sfx('flip');});
  window.addEventListener('resize',resize);
  window.addEventListener('orientationchange',function(){setTimeout(resize,250);});
  // Zoom handling: block pinch/double-tap zoom normally, but if the page does get
