@@ -771,7 +771,7 @@ function buildBG(){
 
 /* ================= ENTITIES ================= */
 function newEnt(kind,r,x){return {kind:kind,r:r,x:x,fr:r,fx:x,t:1,state:'idle',dirUp:false,dropY:0,fallY:0,fallV:0,timer:0,wait:0,hopDur:0.26,dead:false,flap:0,move:null,lastDir:'DL',stand:0};}
-function makePlayer(id,animal,home,board,cpu){var p=newEnt('player',home.r,home.x);p.id=id;p.animal=animal;p.home=home;p.homeBoard=board;p.cpu=cpu;p.held=null;p.buf=null;p.inv=0;p.curse=0;p.score=0;p.lives=3;p.cpuWait=0.5;p.waitT=0;p.mudNext=false;p.dizzy=0;p.spin=0;p.power=0;p.chain=0;return p;}
+function makePlayer(id,animal,home,board,cpu){var p=newEnt('player',home.r,home.x);p.id=id;p.animal=animal;p.home=home;p.homeBoard=board;p.cpu=cpu;p.held=null;p.buf=null;p.inv=0;p.curse=0;p.score=0;p.lives=3;p.cpuWait=0.5;p.waitT=0;p.mudNext=false;p.dizzy=0;p.spin=0;p.power=0;p.chain=0;p.deathScore=null;p.needRelease=false;return p;}
 function hopEnt(e,dir,mult,move){var d=DIRS[dir];e.fr=e.r;e.fx=e.x;e.r+=d[0]*mult;e.x+=d[1]*mult;e.t=0;e.state='hop';e.dirUp=d[0]<0;e.lastDir=dir;e.move=move||null;e.stand=0;}
 function startHop(e,dir){hopEnt(e,dir,1,null);}
 function startDrop(e){e.state='drop';e.dropY=-Math.max(H*0.5,CW*5);e.fr=e.r;e.fx=e.x;e.move=null;}
@@ -812,14 +812,14 @@ function updPlayer(p,dt){
  if(p.waitT>0)p.waitT-=dt;
  if(p.state==='idle'){
   var c=getCube(p.r,p.x);
-  if(!c){p.dirUp=false;startFall(p);p.fallV=0;p.thudDone=false;sfx('fall');voice('ohno',p);p.auto=null;return;}
+  if(!c){p.dirUp=false;startFall(p);p.fallV=0;p.thudDone=false;p.buf=null;p.needRelease=true;sfx('fall');voice('ohno',p);p.auto=null;return;}
   if(PHASE==='run'&&p.auto){autoStep(p);if(p.state==='hop')return;}
   if(PHASE==='run'&&p.spQueued&&!p.auto){p.spQueued=false;useSpecial(p);if(p.state!=='idle')return;}
   if(PHASE==='run'){
    if(WOB>0){p.stand+=dt;var w=p.stand/WOB;if(w>c.wig)c.wig=w;if(p.stand>=WOB){dropCube(c);return;}}
    if(p.waitT<=0){
     if(p.cpu)cpuThink(p,dt);
-    else{var d=p.buf||p.held;if(d){p.buf=null;startHop(p,d);p.hopDur=p.mudNext?0.45:0.26;p.mudNext=false;sfx('hop');}}
+    else{var d=p.buf||(p.needRelease?null:p.held);if(d){p.buf=null;startHop(p,d);p.hopDur=p.mudNext?0.45:0.26;p.mudNext=false;sfx('hop');}}
    }
   }
  }else if(p.state==='hit'){p.timer+=dt;if(p.timer>1.2)afterHit(p);}
@@ -864,7 +864,7 @@ function playerLand(p,wasDrop){
  if(pz){boardPizza(p,pz);return;}
  var g=gorillaAt(p.r,p.x);
  if(g){bonkGorilla(g,p);hopEnt(p,dirKey(p.fr-p.r,p.fx-p.x),1,null);p.hopDur=0.32;return;}
- startFall(p);p.fallV=-CW*2;p.thudDone=false;sfx('fall');voice('ohno',p);
+ startFall(p);p.fallV=-CW*2;p.thudDone=false;p.buf=null;p.needRelease=true;sfx('fall');voice('ohno',p);
 }
 function paint(p,c){
  if(p.power>0&&powerMode()){powerStomp(p,c);return;}
@@ -944,24 +944,31 @@ function nextBoard(){
  beginBoard();setMusic(levelSpec(level));recordProgress();
  var p=players[0];p.r=0;p.x=0;p.state='idle';startDrop(p);
 }
+// If you die again before scoring any points since your last death (e.g. an
+// accidental hop straight off the start cube), it's free: back to the top, no life lost.
+function freeRetry(p){
+ if(p.deathScore===null||p.deathScore===undefined||p.score!==p.deathScore)return false;
+ setBanner('NO HARM DONE','BACK TO THE TOP - NO LIFE LOST','#3cff8a',1.4);sfx('unfreeze');return true;
+}
 function afterFall(p){
  if(MODE==='pyramid'&&BONUS){if(PHASE==='run'){PHASE='clear';phaseT=0;setBanner('BONUS OVER','YOU FELL OFF - NO TIME RECORDED','#ff8a3c',2.2);sfx('undo');}return;}
- if(MODE==='pyramid'&&!BONUS){p.lives--;if(p.lives<0){endGame();return;}}
+ if(MODE==='pyramid'&&!BONUS){if(freeRetry(p)){respawn(p);return;}p.lives--;p.deathScore=p.score;if(p.lives<0){endGame();return;}}
  respawn(p);
 }
 function respawn(p){
- p.power=0;p.auto=null;p.thudDone=false;
+ p.power=0;p.auto=null;p.thudDone=false;p.buf=null;p.needRelease=true;
  p.r=p.home.r;p.x=p.home.x;var hc=cubes[p.r+','+p.x];if(hc&&hc.gone){resetCube(hc);hc.appear=1;}
  startDrop(p);p.inv=1.6;p.waitT=0;p.dizzy=0;
 }
 function hitPlayer(p){
- p.auto=null;voice('ouch',p);
+ p.auto=null;p.buf=null;p.needRelease=true;voice('ouch',p);
  p.state='hit';p.timer=0;p.curse=1.3;sfx('hit');
  if(MODE==='pyramid')freezeT=1.3;
 }
 function afterHit(p){
  if(MODE==='pyramid'){
-  p.lives--;if(p.lives<0){endGame();return;}
+  if(freeRetry(p)){enemies=[];bananas=[];spawnT=2.5;respawn(p);return;}
+  p.lives--;p.deathScore=p.score;if(p.lives<0){endGame();return;}
   enemies=[];bananas=[];p.state='idle';p.stand=0;p.inv=1.5;spawnT=2.5;
  }else respawn(p);
 }
@@ -1551,7 +1558,7 @@ window.addEventListener('keydown',function(ev){
  if(KEYMAP1[c]||KEYMAP2[c])ev.preventDefault();
  if(!keys[c]&&SCREEN==='play'){
   var idx=-1,d=null;if(KEYMAP1[c]){idx=0;d=KEYMAP1[c];}else if(KEYMAP2[c]){idx=(MODE==='2p'||MODE==='h2h')?1:0;d=KEYMAP2[c];if(MODE==='h2h')d=OPP[d];}
-  if(idx>=0&&players[idx]&&!players[idx].cpu)players[idx].buf=d;
+  if(idx>=0&&players[idx]&&!players[idx].cpu&&canBuffer(players[idx]))players[idx].buf=d;
  }
  keys[c]=true;
  if(c==='Escape'&&SCREEN==='settings'){closeSettings();return;}
@@ -1574,6 +1581,7 @@ function gpRead(){
   out.push({dir:d,start:gpPressed(g,9),sp:gpPressed(g,0)||gpPressed(g,1)});}
  return out;
 }
+function canBuffer(p){return !(p.state==='fall'||p.state==='drop'||p.state==='hit'||p.state==='ride');}
 function readInputs(gp){
  for(var i=0;i<players.length;i++){
   var p=players[i];if(p.cpu)continue;
@@ -1582,7 +1590,9 @@ function readInputs(gp){
    if(!d&&i===0&&MODE!=='2p'&&MODE!=='h2h')d=keyDir(KEYMAP2);
    if(!d&&gp[i])d=gp[i].dir;
    if(d&&MODE==='h2h'&&i===1)d=OPP[d];}
-  if(d&&!p.held)p.buf=d;
+  var busy=p.state==='fall'||p.state==='drop'||p.state==='hit'||p.state==='ride';
+  if(!d)p.needRelease=false;          // let go of the D-pad: held moves count again
+  if(d&&!p.held&&!busy)p.buf=d;       // new presses while falling/dropping are ignored
   p.held=d;
  }
 }
@@ -1599,7 +1609,7 @@ function makePad(i){
   if(dx*dx+dy*dy<r.width*r.width*0.006){setPad(i,null);return;}
   setPad(i,dx>=0?(dy<0?'UR':'DR'):(dy>0?'DL':'UL'));}
  pad.addEventListener('pointerdown',function(ev){ev.preventDefault();audioInit();active=ev.pointerId;try{pad.setPointerCapture(ev.pointerId);}catch(e){}upd(ev);
-  var p=players[i];if(p&&padDir[i]&&SCREEN==='play')p.buf=padDir[i];});
+  var p=players[i];if(p&&padDir[i]&&SCREEN==='play'&&canBuffer(p))p.buf=padDir[i];});
  pad.addEventListener('pointermove',function(ev){if(ev.pointerId!==active)return;ev.preventDefault();upd(ev);});
  function end(ev){if(ev.pointerId!==active)return;active=null;setPad(i,null);}
  pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
