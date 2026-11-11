@@ -640,7 +640,7 @@ function dirKey(dr,dx){return dr<0?(dx>0?'UR':'UL'):(dx>0?'DR':'DL');}
 function addScore(p,n){if(p)p.score+=n;}
 function floatText(r,x,text,color){floats.push({r:r,x:x,text:text,color:color,t:0});}
 function setBanner(text,sub,color,dur){banner={text:text,sub:sub,color:color,t:dur,max:dur};}
-function isFrozen(p){return stopT>0&&stopBy&&stopBy!==p&&(p.state==='idle'||p.state==='hop'||p.state==='hit');}
+function isFrozen(p){return stopT>0&&stopBy&&stopBy!==p&&!(p.power>0)&&(p.state==='idle'||p.state==='hop'||p.state==='hit');}
 
 /* ---------- players ---------- */
 function updPlayer(p,dt){
@@ -958,18 +958,21 @@ function bopBonus(p,r,x){
  p.chain++;var pts=200*Math.pow(2,Math.min(p.chain-1,3));addScore(p,pts);
  floatText(r,x,'BOP! +'+pts,'#ffffff');sfx('catch');
 }
+function touching(a,b,rx,ry){return Math.abs(a.x-b.x)<CW*rx&&Math.abs(a.y-b.y)<CW*ry;}
+// While powered, touching ANY creature or the rival knocks it out.
 function powerCollide(p,pp){
  for(var j=0;j<enemies.length;j++){
-  var e=enemies[j];if(e.dead||e.kind==='gorilla'||e.kind==='mole'||e.kind==='sloth')continue;
-  if(e.state==='fall'||e.state==='drop'||e.state==='leave')continue;
-  var ep=entPos(e),hit=e.kind==='parrot'?((pp.x-ep.x)*(pp.x-ep.x)+(pp.y-ep.y)*(pp.y-ep.y)<CW*CW*0.3):(Math.abs(pp.x-ep.x)<CW*0.45&&Math.abs(pp.y-ep.y)<CW*0.36);
-  if(!hit)continue;
-  if(e.kind==='parrot'){e.state='leave';e.lx=e.gx+(Math.random()<0.5?-14:14);bopBonus(p,p.r,p.x);continue;}
-  e.hunt=null;e.lure=null;e.dirUp=false;startFall(e);e.fallV=-CW*1.5;bopBonus(p,e.r,e.x);
+  var e=enemies[j];if(e.dead||e.kind==='gorilla'||e.bopped)continue;
+  if(e.state==='fall'||e.state==='leave'||e.state==='bonk')continue;
+  var ep=entPos(e);
+  if(e.kind==='mole'){if((e.state==='rise'||e.state==='up')&&touching(pp,ep,0.55,0.5)){e.state='bonk';e.t=0;sfx('bonk');bopBonus(p,e.r,e.x);}continue;}
+  if(e.kind==='parrot'){if(touching(pp,ep,0.6,0.55)){e.state='leave';e.lx=e.gx+(Math.random()<0.5?-14:14);bopBonus(p,p.r,p.x);}continue;}
+  if(!touching(pp,ep,0.55,0.45))continue;
+  e.bopped=true;e.hunt=null;e.lure=null;e.dirUp=false;startFall(e);e.fallV=-CW*1.5;bopBonus(p,e.r,e.x);
  }
- for(var k=0;k<players.length;k++){var q=players[k];if(q===p||q.power>0||q.inv>0)continue;
-  if(q.state==='hit'||q.state==='ride'||q.state==='fall'||q.state==='drop')continue;
-  var qp=entPos(q);if(Math.abs(pp.x-qp.x)<CW*0.45&&Math.abs(pp.y-qp.y)<CW*0.36){hitPlayer(q);bopBonus(p,q.r,q.x);}}
+ for(var k=0;k<players.length;k++){var q=players[k];if(q===p||q.power>0)continue;
+  if(q.state==='hit'||q.state==='ride'||q.state==='fall')continue;
+  if(touching(pp,entPos(q),0.55,0.45)){q.inv=0;hitPlayer(q);bopBonus(p,q.r,q.x);}}
 }
 /* ---------- versus comeback helpers ---------- */
 function wipeCube(c,label){
