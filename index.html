@@ -441,7 +441,7 @@ function levelSpec(lv){
  var keys=[0,5,-3,2,-5],root=((keys[c]+cyc*2)%12+12)%12;if(root>6)root-=12;
  return {id:'lv'+lv,tier:tier,remix:c===4,seed:lv*7919+13,bpm:[82,104,124,146][tier]+(c===4?8:0)+Math.min(cyc,4)*6,root:root,mode:tier>=2?'minor':'major'};
 }
-var MENU_SPEC={id:'menu',tier:0,remix:true,seed:4242,bpm:90,root:-3,mode:'major'};
+function menuSpec(){return {id:'funky1',data:FUNKY_SONG,variant:1};}
 function buildSong(sp){
  var R=rng(sp.seed),sc=SCALES[sp.mode],pr=PROGS[sp.mode],prog=pr[Math.floor(R()*pr.length)];
  var chords=prog.concat(prog),mel=[],rhy=RHY[sp.tier],i,b;
@@ -945,6 +945,7 @@ function nextBoard(){
  var p=players[0];p.r=0;p.x=0;p.state='idle';startDrop(p);
 }
 function afterFall(p){
+ if(MODE==='pyramid'&&BONUS){if(PHASE==='run'){PHASE='clear';phaseT=0;setBanner('BONUS OVER','YOU FELL OFF - NO TIME RECORDED','#ff8a3c',2.2);sfx('undo');}return;}
  if(MODE==='pyramid'&&!BONUS){p.lives--;if(p.lives<0){endGame();return;}}
  respawn(p);
 }
@@ -964,9 +965,17 @@ function afterHit(p){
   enemies=[];bananas=[];p.state='idle';p.stand=0;p.inv=1.5;spawnT=2.5;
  }else respawn(p);
 }
+function gorillaBySide(pz){
+ var bd=boards[pz.b];
+ for(var i=0;i<enemies.length;i++){var e=enemies[i];
+  if(e.kind!=='gorilla'||e.dead||e.cheer||!(e.state==='sit'||e.state==='enter')||e.board!==pz.b)continue;
+  if(bd&&bd.ax!==undefined&&!bd.home&&(pz.x-bd.ax)*(e.gx-bd.ax)<=0)continue; // other side of the pyramid
+  return e;}
+ return null;
+}
 function boardPizza(p,pz){
  var rivalPz=MODE!=='pyramid'&&showdown&&pz.b!==p.homeBoard;
- pz.used=true;p.state='ride';p.ride={t:0,pz:pz,b:boards[rivalPz?p.homeBoard:pz.b]};p.inv=0;p.pzGoal=null;
+ pz.used=true;p.state='ride';p.ride={t:0,pz:pz,b:boards[rivalPz?p.homeBoard:pz.b],gor:gorillaBySide(pz)};p.inv=0;p.pzGoal=null;
  if(rivalPz){var rv=players[p.id===1?1:0];if(rv)spawnHunter(p,rv);}
  p.rx=sx(pz.x);p.ry=sy(pz.r);sfx('pizza');floatText(pz.r,pz.x,'PIZZA!','#ffd23f');
  for(var i=0;i<enemies.length;i++){var e=enemies[i];
@@ -976,14 +985,21 @@ function updRide(p,dt){
  MIR=MODE==='h2h'&&p.homeBoard==='B';try{updRide2(p,dt);}finally{MIR=false;}
 }
 function updRide2(p,dt){
- var R=p.ride;R.t+=dt/1.5;
- var hc=homeCell(R.b),x0=sx(R.pz.x),y0=sy(R.pz.r),x1=sx(hc.x),y1=sy(hc.r);
+ var R=p.ride,g=R.gor,hc=homeCell(R.b),x0,y0,x1,y1,dur=1.5;
+ if(g&&!R.leg2){x0=sx(R.pz.x);y0=sy(R.pz.r);x1=sx(g.gx);y1=sy(g.gy)-CW*0.7;dur=1.0;}
+ else if(g){x0=R.sx0;y0=R.sy0;x1=sx(hc.x);y1=sy(hc.r);dur=1.1;}
+ else{x0=sx(R.pz.x);y0=sy(R.pz.r);x1=sx(hc.x);y1=sy(hc.r);}
+ R.t+=dt/dur;
  if(R.t<0.15){p.rx=x0;p.ry=y0-CW*0.1;}
  else{
   var u=(R.t-0.15)/0.85;u=u<0?0:(u>1?1:u);var e=u*u*(3-2*u);
   var cxm=(x0+x1)/2,cym=Math.min(y0,y1)-CW*2.4;
   var a=(1-e)*(1-e),b=2*(1-e)*e,c=e*e;
   p.rx=a*x0+b*cxm+c*x1;p.ry=a*y0+b*cym+c*y1-CW*0.1;
+ }
+ if(R.t>=1&&g&&!R.leg2){ // landed on the gorilla: bop him, then bounce on to the start
+  if(!g.dead&&(g.state==='sit'||g.state==='enter')){bonkGorilla(g,p);floatText(g.gy,g.gx,'PIZZA BOP!','#ffd23f');}
+  R.leg2=true;R.t=0.15;R.sx0=x1;R.sy0=y1;return;
  }
  if(R.t>=1){
   p.r=hc.r;p.x=hc.x;p.fr=p.r;p.fx=p.x;p.state='idle';p.stand=0;p.inv=0.6;p.ride=null;
@@ -1619,7 +1635,7 @@ function showScreen(n){
  var ids=['menu','select','over','pause','settings','scores'];
  for(var i=0;i<ids.length;i++)document.getElementById(ids[i]).style.display=(ids[i]===n)?'flex':'none';
  SCREEN=n;if(n!=='play'){setPad(0,null);setPad(1,null);var tst=document.getElementById('toast');if(tst)tst.style.display='none';}
- if(n==='menu'||n==='select')setMusic(MENU_SPEC);
+ if(n==='menu'||n==='select'||n==='scores')setMusic(menuSpec());
  duck=(n==='pause'||(n==='settings'&&setFrom==='pause'))?0.35:1;applyVolumes();
  layoutPads();
 }
