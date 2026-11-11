@@ -62,6 +62,7 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
 .a-down:after{border-top-color:#ffffff;margin:0 0 0 -6px}
 .a-left:after{border-right-color:#ffffff;margin:-6px 0 0 -12px}
 .a-right:after{border-left-color:#ffffff;margin:-6px 0 0 0}
+#menu{padding-top:calc(env(safe-area-inset-top,0px) + 62px)}
 #cogBtn{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);width:44px;height:44px;padding:6px;background:#160733;border:2px solid #29f3ff;border-radius:4px;box-shadow:0 0 10px #29f3ff;cursor:pointer;color:#29f3ff}
 #cogBtn svg{width:100%;height:100%;display:block}
 .setbox{width:100%;max-width:300px;margin:0 auto 10px;text-align:left}
@@ -91,6 +92,7 @@ h2{font-size:13px;margin:0 0 16px;line-height:1.7;font-weight:normal}
   <div class="btns">
     <button class="btn" data-mode="pyramid" style="border-color:#ffd23f;box-shadow:0 0 12px #ffd23f">Classic pyramid<small>1 player, portrait</small></button>
     <button class="btn" data-mode="cpu">Versus CPU<small>1 player, landscape</small></button>
+    <button class="btn" data-mode="cpux" style="border-color:#3cff8a;box-shadow:0 0 12px #3cff8a">Vs. CPU experimental<small>1 player, portrait</small></button>
     <button class="btn" data-mode="2p" style="border-color:#ff3cf0;box-shadow:0 0 12px #ff3cf0">2 players<small>Same phone or 2 controllers</small></button>
   </div>
   <div class="hint">The D-pad is turned 45&deg; like the arcade stick, so up hops up-right. Pizza boxes fly you back to the top. Keyboard: WASD and arrow keys.</div>
@@ -477,9 +479,26 @@ function setupBoards(){
   for(var i=0;i<br.length;i++){var c=addCube(br[i][0],br[i][1],'X');c.hidden=true;c.appear=-i*0.35;}
   pizzas.push({r:2,x:-4,b:'A',used:false},{r:4,x:6,b:'A',used:false},{r:4,x:8,b:'B',used:false},{r:2,x:18,b:'B',used:false});
  }
+ if(MODE==='cpux'){cubes={};cubeList=[];pizzas=[];boards={};setupYinYang();}
  cubeList.sort(function(a,b){return (a.r-b.r)||(a.x-b.x);});
  placeSpecials();
 }
+// Vs. CPU experimental: two interlocking hook-shaped boards for portrait.
+// CPU (B) starts top-left, runs across the top and down the right side;
+// you (A) start bottom-right, run across the bottom and up the left side.
+// A is B rotated 180 degrees around (5,7); a zig-zag bridge crosses the middle.
+function setupYinYang(){
+ var C=[[0,[0,2,4,6,8,10,12]],[1,[1,3,5,7,9,11]],[2,[10,12]],[3,[11,13]],[4,[12,14]],[5,[11,13]]],i,j,r,x;
+ for(i=0;i<C.length;i++)for(j=0;j<C[i][1].length;j++){r=C[i][0];x=C[i][1][j];addCube(r,x,'B');addCube(10-r,14-x,'A');}
+ var br=[[4,4],[5,5],[4,6],[5,7],[6,8],[5,9],[6,10]];
+ for(i=0;i<br.length;i++){var c=addCube(br[i][0],br[i][1],'X');c.hidden=true;c.appear=-i*0.2;}
+ boards.A={id:'A',home:{r:10,x:14},keeper:[{r:5,x:1},{r:5,x:3}],spawn:[{r:5,x:1},{r:5,x:3},{r:6,x:0},{r:6,x:2}],fl:{r:9,a:3,b:13},gor:{gx:12.8,gy:6.9},
+  twin:function(c){return cubes[(10-c.r)+','+(14-c.x)];}};
+ boards.B={id:'B',home:{r:0,x:0},keeper:[{r:5,x:13},{r:5,x:11}],spawn:[{r:2,x:10},{r:2,x:12},{r:1,x:5},{r:1,x:7}],fl:{r:1,a:1,b:11},gor:{gx:1.2,gy:3.1}};
+ pizzas.push({r:2,x:4,b:'B',used:false},{r:1,x:13,b:'B',used:false},{r:8,x:10,b:'A',used:false},{r:9,x:1,b:'A',used:false});
+}
+function homeCell(bd){return bd.home||{r:0,x:bd.ax};}
+function isCpuMode(m){return m==='cpu'||m==='cpux';}
 function placeSpecials(){
  for(var i=0;i<cubeList.length;i++)cubeList[i].special=null;
  if(level<3)return;
@@ -489,7 +508,7 @@ function placeSpecials(){
  for(i=0;i<nI;i++)kinds.push('ice');for(i=0;i<nM;i++)kinds.push('mud');for(i=0;i<nT;i++)kinds.push('tramp');
  for(i=0;i<kinds.length&&i<cand.length;i++){
   cand[i].special=kinds[i];
-  if(boards.B){var twin=cubes[cand[i].r+','+(cand[i].x+boards.B.ax)];if(twin)twin.special=kinds[i];}
+  if(boards.B){var twin=boards.A.twin?boards.A.twin(cand[i]):cubes[cand[i].r+','+(cand[i].x+boards.B.ax)];if(twin)twin.special=kinds[i];}
  }
 }
 function resetCube(c){c.owner=0;c.prog=0;c.locked=false;c.peel=false;c.gone=false;c.goneT=0;}
@@ -501,7 +520,7 @@ function cubeStyle(c){if(MODE==='pyramid')return LEVEL_STYLES[styleIdx%LEVEL_STY
 function stageColor(owner,prog){if(!owner||prog<=0)return NEU;if(prog>=NEED)return PCOL[owner];return mix(NEU,PCOL[owner],0.25+0.5*(prog/NEED));}
 
 function padSize(){return Math.round(Math.max(110,Math.min(160,Math.min(W,H)*0.36)));}
-function bottomPads(){return MODE==='pyramid'||H>W;}
+function bottomPads(){return MODE==='pyramid'||MODE==='cpux'||H>W;}
 function computeLayout(){
  if(!cubeList.length)return;
  var minX=1e9,maxX=-1e9,maxR=0,i,c;
@@ -707,7 +726,7 @@ function boardPizza(p,pz){
 }
 function updRide(p,dt){
  var R=p.ride;R.t+=dt/1.5;
- var x0=sx(R.pz.x),y0=sy(R.pz.r),x1=sx(R.b.ax),y1=sy(0);
+ var hc=homeCell(R.b),x0=sx(R.pz.x),y0=sy(R.pz.r),x1=sx(hc.x),y1=sy(hc.r);
  if(R.t<0.15){p.rx=x0;p.ry=y0-CW*0.1;}
  else{
   var u=(R.t-0.15)/0.85;u=u<0?0:(u>1?1:u);var e=u*u*(3-2*u);
@@ -716,7 +735,7 @@ function updRide(p,dt){
   p.rx=a*x0+b*cxm+c*x1;p.ry=a*y0+b*cym+c*y1-CW*0.1;
  }
  if(R.t>=1){
-  p.r=0;p.x=R.b.ax;p.fr=p.r;p.fx=p.x;p.state='idle';p.stand=0;p.inv=0.6;p.ride=null;
+  p.r=hc.r;p.x=hc.x;p.fr=p.r;p.fx=p.x;p.state='idle';p.stand=0;p.inv=0.6;p.ride=null;
   var cb=cubes[p.r+','+p.x];if(cb&&cb.gone){resetCube(cb);cb.appear=1;}
   cb=getCube(p.r,p.x);if(cb)paint(p,cb);
  }
@@ -785,14 +804,18 @@ function spawnEnemy(){
  if(kind==='parrot'){spawnParrot();return;}
  if(kind==='gorilla'){spawnGorilla(b);return;}
  if(kind==='flamingo'){
-  var side=pick([-1,1]),r=bd.rows-1;e=newEnt('flamingo',r,ax+side*r);e.sd=-side;e.board=b;e.wait=0.4;startDrop(e);enemies.push(e);return;
+  var side=pick([-1,1]);
+  if(bd.fl){e=newEnt('flamingo',bd.fl.r,side<0?bd.fl.a:bd.fl.b);e.sd=side<0?1:-1;}
+  else{var r=bd.rows-1;e=newEnt('flamingo',r,ax+side*r);e.sd=-side;}
+  e.board=b;e.wait=0.4;startDrop(e);enemies.push(e);return;
  }
  if(kind==='keeper'){
   var cnt={A:0,B:0};for(i=0;i<enemies.length;i++){if(enemies[i].kind==='keeper'&&!enemies[i].dead)cnt[enemies[i].board]=(cnt[enemies[i].board]||0)+1;}
-  if(MODE!=='pyramid'){b=cnt.A<=cnt.B?'A':'B';ax=boards[b].ax;}
-  for(i=0;i<players.length;i++){var p=players[i];if(p.r<=1&&Math.abs(p.x-ax)<=1)return;}
-  e=newEnt('keeper',0,ax);e.wait=0.6;
- }else{e=newEnt(kind,1,ax+pick([-1,1]));e.wait=kind==='sloth'?0.8:0.3;e.stomps=0;}
+  if(MODE!=='pyramid'){b=cnt.A<=cnt.B?'A':'B';bd=boards[b];ax=bd.ax;}
+  var kc=bd.keeper?pick(bd.keeper):{r:0,x:ax};
+  for(i=0;i<players.length;i++){var p=players[i];if(Math.abs(p.r-kc.r)<=1&&Math.abs(p.x-kc.x)<=1)return;}
+  e=newEnt('keeper',kc.r,kc.x);e.wait=0.6;
+ }else{var sc=bd.spawn?pick(bd.spawn):{r:1,x:ax+pick([-1,1])};e=newEnt(kind,sc.r,sc.x);e.wait=kind==='sloth'?0.8:0.3;e.stomps=0;}
  e.board=b;startDrop(e);enemies.push(e);
 }
 function spawnParrot(){
@@ -824,7 +847,7 @@ function updParrot(e,dt){
 }
 function spawnGorilla(b){
  var bd=boards[b],side=MODE==='pyramid'?pick([-1,1]):(b==='A'?-1:1);
- var e=newEnt('gorilla',0,0);e.gx=bd.ax+side*4.5;e.gy=0.55;e.board=b;e.state='enter';e.dropY=-Math.max(H*0.6,CW*6);e.throws=0;e.timer=0.6;e.arm=0;
+ var e=newEnt('gorilla',0,0);e.gx=bd.gor?bd.gor.gx:bd.ax+side*4.5;e.gy=bd.gor?bd.gor.gy:0.55;e.board=b;e.state='enter';e.dropY=-Math.max(H*0.6,CW*6);e.throws=0;e.timer=0.6;e.arm=0;
  enemies.push(e);
 }
 function updGorilla(e,dt){
@@ -875,7 +898,8 @@ function bananaHit(c){
 }
 function spawnHunter(by,tgt){
  var bd=boards[tgt.homeBoard],r=0,x=bd.ax,i;
- if(Math.max(Math.abs(tgt.r-r),Math.abs(tgt.x-x))<=2){var opts=[[bd.rows-1,bd.ax-(bd.rows-1)],[bd.rows-1,bd.ax+(bd.rows-1)]],bst=-1;
+ if(bd.home){var far=-1;for(i=0;i<cubeList.length;i++){var q=cubeList[i];if(q.board!==bd.id||q.gone||q.hidden)continue;var qd=Math.max(Math.abs(tgt.r-q.r),Math.abs(tgt.x-q.x));if(qd>far){far=qd;r=q.r;x=q.x;}}}
+ else if(Math.max(Math.abs(tgt.r-r),Math.abs(tgt.x-x))<=2){var opts=[[bd.rows-1,bd.ax-(bd.rows-1)],[bd.rows-1,bd.ax+(bd.rows-1)]],bst=-1;
   for(i=0;i<opts.length;i++){var dd=Math.max(Math.abs(tgt.r-opts[i][0]),Math.abs(tgt.x-opts[i][1]));if(getCube(opts[i][0],opts[i][1])&&dd>bst){bst=dd;r=opts[i][0];x=opts[i][1];}}}
  var e=newEnt('keeper',r,x);e.hunt=tgt;e.huntT=12;e.board=bd.id;e.wait=0.7;startDrop(e);enemies.push(e);
  setBanner('ZOOKEEPER UNLEASHED!','HUNTING '+ANIMALS[tgt.animal].name.toUpperCase()+' FOR 12 SECONDS',PCOL[by.id],2.4);sfx('hunter');
@@ -967,8 +991,8 @@ function startGame(advance){
  styleIdx=0;applyRules();setupBoards();
  players=[];showdown=false;timeLeft=90;banner=null;CUBE={};
  PCOL[1]=ANIMALS[picks[0]].color;
- players.push(makePlayer(1,picks[0],{r:0,x:0},'A',false));
- if(MODE!=='pyramid'){PCOL[2]=ANIMALS[picks[1]].color;players.push(makePlayer(2,picks[1],{r:0,x:14},'B',MODE==='cpu'));}
+ players.push(makePlayer(1,picks[0],MODE==='cpux'?{r:10,x:14}:{r:0,x:0},'A',false));
+ if(MODE!=='pyramid'){PCOL[2]=ANIMALS[picks[1]].color;players.push(makePlayer(2,picks[1],MODE==='cpux'?{r:0,x:0}:{r:0,x:14},'B',isCpuMode(MODE)));}
  beginBoard();computeLayout();
  for(var i=0;i<players.length;i++)startDrop(players[i]);
  padDir=[null,null];
@@ -984,7 +1008,7 @@ function endGame(){
   html=img(p.animal,110)+'<h2 style="font-size:18px;color:#ff3c5a;text-shadow:0 0 12px #ff3c5a">Game over</h2><div class="tag">Score '+p.score+'<br>Reached level '+level+', board '+round+'</div>';
  }else{
   var a=players[0],b=players[1],c1=countOwner(1),c2=countOwner(2);
-  var la=MODE==='cpu'?'You':'P1 '+nameOf(a),lb=MODE==='cpu'?'CPU '+nameOf(b):'P2 '+nameOf(b);
+  var la=isCpuMode(MODE)?'You':'P1 '+nameOf(a),lb=isCpuMode(MODE)?'CPU '+nameOf(b):'P2 '+nameOf(b);
   if(c1===c2)html=img(a.animal,90)+img(b.animal,90)+'<h2 style="font-size:18px;color:#ffffff;text-shadow:0 0 12px #ffffff">Tie game!</h2>';
   else{var w=c1>c2?a:b,col=PCOL[w.id],lbl=c1>c2?la:lb;
    html=img(w.animal,120)+'<h2 style="font-size:18px;color:'+col+';text-shadow:0 0 12px '+col+'">'+(lbl==='You'?'You win!':lbl+' wins!')+'</h2>';}
@@ -997,7 +1021,7 @@ function endGame(){
  newUnlocks=[];
  document.getElementById('overBody').innerHTML=html;
  showScreen('over');sfx(MODE==='pyramid'?'hit':'win');
- stopMusic();jingle(MODE==='pyramid'||(MODE==='cpu'&&c2>c1)?'lose':'win');
+ stopMusic();jingle(MODE==='pyramid'||(isCpuMode(MODE)&&c2>c1)?'lose':'win');
 }
 function doRematch(){startGame(MODE!=='pyramid');}
 
@@ -1107,7 +1131,7 @@ function renderSelect(){
   b.addEventListener('click',function(){
    if(taken)return;audioInit();sfx('flip');picks.push(key);
    if(selMode==='2p'&&pickStage===1){pickStage=2;renderSelect();return;}
-   if(selMode==='cpu'){var rest=[];for(var j=0;j<ORDER.length;j++)if(ORDER[j]!==key&&isUnlocked(ORDER[j]))rest.push(ORDER[j]);picks.push(pick(rest));}
+   if(isCpuMode(selMode)){var rest=[];for(var j=0;j<ORDER.length;j++)if(ORDER[j]!==key&&isUnlocked(ORDER[j]))rest.push(ORDER[j]);picks.push(pick(rest));}
    startGame(pendingAdvance);pendingAdvance=false;
   });
   box.appendChild(b);
@@ -1252,7 +1276,7 @@ function drawHUD(){
  }else{
   for(var j=0;j<2;j++){
    var q=players[j],left=j===0,x=left?L:R,col=PCOL[q.id];
-   var nm=(q.cpu?'CPU ':'P'+(j+1)+' ')+nameOf(q).toUpperCase();
+   var nm=W<560?(q.cpu?'CPU':(isCpuMode(MODE)?'YOU':'P'+(j+1))):(q.cpu?'CPU ':'P'+(j+1)+' ')+nameOf(q).toUpperCase();
    var n=showdown?''+countOwner(q.id):ownBoard(q);
    ctx.drawImage(SPR_C[q.animal],left?x:x-26,y,26,26);
    txt(nm,left?x+32:x-32,y+1,8,col,left?'left':'right');
@@ -1261,7 +1285,7 @@ function drawHUD(){
   if(showdown){var hot=timeLeft<=10;var pulse=hot?(0.6+0.4*Math.abs(Math.sin(TIME*6))):1;
    ctx.globalAlpha=pulse;txt(fmtTime(timeLeft),W/2,y+2,16,hot?'#ff3c5a':'#ffffff','center',12);ctx.globalAlpha=1;
    txt('MOST CUBES WINS',W/2,y+24,7,'#b9a6ff','center');}
-  else{txt('LV '+level+'  BOARD '+round,W/2,y+2,8,'#ffd23f','center',8);txt('FILL YOUR BOARD',W/2,y+15,7,'#b9a6ff','center');}
+  else{txt('LV '+level+'  BOARD '+round,W/2,y+2,8,'#ffd23f','center',8);if(W>=560)txt('FILL YOUR BOARD',W/2,y+15,7,'#b9a6ff','center');}
  }
  if(stopT>0)txt('TIME STOP '+Math.ceil(stopT),W/2,y+(MODE==='pyramid'?42:34),8,'#7fe8ff','center',10);
 }
@@ -1306,7 +1330,8 @@ function drawGame(){
  drawHUD();
  if(PHASE==='ready')drawReady();
  drawBanner();
- if(MODE!=='pyramid'&&H>W)txt('TURN SIDEWAYS FOR VERSUS',W/2,SAFE.t+56,8,'#29f3ff','center',8);
+ if(MODE!=='pyramid'&&MODE!=='cpux'&&H>W)txt('TURN SIDEWAYS FOR VERSUS',W/2,SAFE.t+56,8,'#29f3ff','center',8);
+ if(MODE==='cpux'&&W>H)txt('TURN UPRIGHT FOR THIS MODE',W/2,SAFE.t+56,8,'#29f3ff','center',8);
 }
 function render(){
  ctx.setTransform(DPR,0,0,DPR,0,0);
