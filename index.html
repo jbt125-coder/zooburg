@@ -583,7 +583,7 @@ var KIND_NAME={mole:'MOLE',roo:'KANGAROO',keeper:'ZOOKEEPER',parrot:'PARROT',slo
 /* ================= RULES & BOARD ================= */
 function applyRules(){
  NEED=level>=5?3:(level>=2?2:1);
- RULE=level>=4?'wrap':(level>=3?'back':'normal');
+ RULE='normal'; // finished cubes stay finished; only creatures can undo them
  WOB=level>=4?1.5:(level===3?2:(level===2?3:0));
  BASESPEED=1+(level-1)*0.12+(round-1)*0.04;SPEED=BASESPEED;
 }
@@ -591,9 +591,10 @@ function ruleText(){
  if(BONUS)return 'TOUCH EVERY CUBE AS FAST AS YOU CAN';
  if(level===1)return 'ONE HOP PAINTS A CUBE';
  if(level===2)return 'TWO HOPS PER CUBE. KEEP MOVING!';
- if(level===3)return 'HOP A FINISHED CUBE AND IT ROLLS BACK';
- if(level===4)return 'OVERSHOOT AND THE COLOR WRAPS AROUND';
- return 'THREE HOPS PER CUBE. IT WRAPS!';
+ if(level===3)return 'NEW: MUD BLOCKS SLOW YOU DOWN';
+ if(level===4)return 'NEW: ICE BLOCKS SLIDE YOU ONE MORE CUBE';
+ if(level===5)return 'THREE HOPS PER CUBE. NEW: BOUNCE PADS!';
+ return 'THREE HOPS PER CUBE. KEEP MOVING!';
 }
 function buildRoster(n){
  if(MODE!=='pyramid'){var v=['roo','elephant','gorilla'],o=shuffle(['keeper','parrot','sloth','flamingo']);for(var j=0;j<Math.min(o.length,n-1);j++)v.push(o[j]);v.push('mole');return v;}
@@ -679,16 +680,29 @@ function sideOf(e){
 var OPP={UR:'DL',DL:'UR',UL:'DR',DR:'UL'};
 function homeCell(bd){return bd.home||{r:0,x:bd.ax};}
 function isCpuMode(m){return m==='cpu'||m==='cpux';}
+// Challenge blocks arrive one per level: mud (3), ice (4), bounce pads (5).
+// Ice only goes where a cube waits on all four sides (never the bottom row or
+// an edge). Bounce pads can go anywhere: the launch is shortened when there
+// isn't room, so neither block can send you off the board by itself.
+function cellOn(r,x,bd){var q=cubes[r+','+x];return !!(q&&!q.hidden&&q.board===bd);}
+function specialSafe(kind,c){
+ if(kind==='mud'||kind==='tramp')return true;
+ for(var dk in DIRS){var d=DIRS[dk];if(!cellOn(c.r+d[0],c.x+d[1],c.board))return false;}
+ return true;
+}
 function placeSpecials(){
  for(var i=0;i<cubeList.length;i++)cubeList[i].special=null;
  if(level<3)return;
- var cand=[];for(i=0;i<cubeList.length;i++){var c=cubeList[i];if(c.board==='A'&&c.r>=1)cand.push(c);}
+ var cand=[];for(i=0;i<cubeList.length;i++){var c=cubeList[i];if(c.board==='A'&&c.r>=1&&!(c.r===0))cand.push(c);}
  shuffle(cand);
- var kinds=[],nI=level>=4?3:2,nM=2,nT=level>=4?2:1;
- for(i=0;i<nI;i++)kinds.push('ice');for(i=0;i<nM;i++)kinds.push('mud');for(i=0;i<nT;i++)kinds.push('tramp');
- for(i=0;i<kinds.length&&i<cand.length;i++){
-  cand[i].special=kinds[i];
-  if(boards.B){var twin=boards.A.twin?boards.A.twin(cand[i]):cubes[cand[i].r+','+(cand[i].x+boards.B.ax)];if(twin)twin.special=kinds[i];}
+ var nT=level>=6?2:(level>=5?1:0),nI=level>=6?3:(level>=4?2:0),nM=2;
+ var kinds=[],used={};
+ for(i=0;i<nT;i++)kinds.push('tramp');for(i=0;i<nI;i++)kinds.push('ice');for(i=0;i<nM;i++)kinds.push('mud');
+ for(var k=0;k<kinds.length;k++){
+  for(i=0;i<cand.length;i++){var q=cand[i];if(used[i]||!specialSafe(kinds[k],q))continue;
+   var twin=boards.B?(boards.A.twin?boards.A.twin(q):cubes[q.r+','+(q.x+boards.B.ax)]):null;
+   if(boards.B&&(!twin||!specialSafe(kinds[k],twin)))continue;
+   used[i]=1;q.special=kinds[k];if(twin)twin.special=kinds[k];break;}
  }
 }
 function resetCube(c){c.owner=0;c.prog=0;c.locked=false;c.peel=false;c.gone=false;c.goneT=0;}
@@ -855,8 +869,10 @@ function playerLand(p,wasDrop){
    shakeT=0.25;sfx('stomp');return;}
   if(p.auto)return;
   if(c.peel){c.peel=false;floatText(c.r,c.x,'SLIP!','#ffd23f');sfx('slip');p.spin=0.45;hopEnt(p,pick(['DL','DR']),1,'slide');p.hopDur=0.18;return;}
-  if(c.special==='ice'&&mv!=='tramp'){sfx('ice');hopEnt(p,p.lastDir,1,'slide');p.hopDur=0.17;return;}
-  if(c.special==='tramp'){sfx('spring');hopEnt(p,p.lastDir,2,'tramp');p.hopDur=0.5;return;}
+  var ld=DIRS[p.lastDir]||DIRS.DL;
+  if(c.special==='ice'&&mv!=='tramp'&&getCube(p.r+ld[0],p.x+ld[1])){sfx('ice');hopEnt(p,p.lastDir,1,'slide');p.hopDur=0.17;return;}
+  if(c.special==='tramp'&&mv!=='tramp'){var far=getCube(p.r+ld[0]*2,p.x+ld[1]*2)?2:(getCube(p.r+ld[0],p.x+ld[1])?1:0);
+   sfx('spring');hopEnt(p,p.lastDir,far,'tramp');p.hopDur=far?0.5:0.35;return;}
   if(c.special==='mud'&&!(p.power>0)){p.waitT=0.45;p.mudNext=true;sfx('mud');floatText(c.r,c.x,'MUD','#c98a4a');}
   return;
  }
@@ -1855,7 +1871,7 @@ function drawReady(){
  if(MODE==='2p'&&specialOn()&&players[1]){txt('P1 '+SKILLS[players[0].animal].name+' x'+(players[0].charges||0)+'   P2 '+SKILLS[players[1].animal].name+' x'+(players[1].charges||0),W/2,yy,7,'#ffd23f','center',6);yy+=14;}
  else if(specialOn()&&rp&&!rp.cpu&&SKILLS[rp.animal]){txt('SPECIAL: '+SKILLS[rp.animal].name+'  x'+(rp.charges||0)+'  (+1 EACH BOARD)',W/2,yy,7,'#ffd23f','center',6);yy+=14;}
  if(MODE==='cpux'&&boards.A&&boards.A.name){txt('BOARD SHAPE: '+boards.A.name,W/2,yy,7,'#3cff8a','center',6);yy+=14;}
- if(level>=3){txt('ICE SLIDES  MUD SLOWS  SPRINGS LAUNCH',W/2,yy,7,'#7fe8ff','center');yy+=14;}
+ if(level>=3&&!BONUS){txt((level>=3?'MUD SLOWS':'')+(level>=4?'  ICE SLIDES':'')+(level>=5?'  BOUNCE PADS LAUNCH':''),W/2,yy,7,'#7fe8ff','center');yy+=14;}
  if(WOB>0){txt('STAND STILL '+WOB+'S AND YOUR CUBE DROPS',W/2,yy,7,'#ff8a3c','center');yy+=14;}
  var n=ROSTER.length,sz=Math.min(30,Math.floor((W-40)/(n*1.3))),gap=sz*1.3,x0=W/2-(n-1)*gap/2;
  yy+=6;
