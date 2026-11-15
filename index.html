@@ -582,7 +582,7 @@ var KIND_NAME={mole:'MOLE',roo:'KANGAROO',keeper:'ZOOKEEPER',parrot:'PARROT',slo
 
 /* ================= RULES & BOARD ================= */
 function applyRules(){
- NEED=level>=5?3:(level>=2?2:1);
+ NEED=Math.min(level,3); // level 1: one hop per cube, level 2: two, level 3 and up: three
  RULE='normal'; // finished cubes stay finished; only creatures can undo them
  WOB=level>=4?1.5:(level===3?2:(level===2?3:0));
  BASESPEED=1+(level-1)*0.12+(round-1)*0.04;SPEED=BASESPEED;
@@ -591,9 +591,9 @@ function ruleText(){
  if(BONUS)return 'TOUCH EVERY CUBE AS FAST AS YOU CAN';
  if(level===1)return 'ONE HOP PAINTS A CUBE';
  if(level===2)return 'TWO HOPS PER CUBE. KEEP MOVING!';
- if(level===3)return 'NEW: MUD BLOCKS SLOW YOU DOWN';
+ if(level===3)return 'THREE HOPS PER CUBE. NEW: MUD SLOWS YOU!';
  if(level===4)return 'NEW: ICE BLOCKS SLIDE YOU ONE MORE CUBE';
- if(level===5)return 'THREE HOPS PER CUBE. NEW: BOUNCE PADS!';
+ if(level===5)return 'NEW: BOUNCE PADS LAUNCH YOU!';
  return 'THREE HOPS PER CUBE. KEEP MOVING!';
 }
 function buildRoster(n){
@@ -711,7 +711,7 @@ function pizzaAt(r,x){for(var i=0;i<pizzas.length;i++){var p=pizzas[i];if(!p.use
 function sx(x){return OX+(MIR?10-x:x)*CW/2;}
 function sy(r){return OY+(MIR?12-r:r)*CW*0.75;}
 function cubeStyle(c){if(MODE==='pyramid'&&BONUS)return 'X';if(MODE==='pyramid')return LEVEL_STYLES[styleIdx%LEVEL_STYLES.length];return c.board==='A'?'A':(c.board==='B'?'B':'X');}
-function stageColor(owner,prog){if(!owner||prog<=0)return NEU;if(prog>=NEED)return PCOL[owner];return mix(NEU,PCOL[owner],0.25+0.5*(prog/NEED));}
+function stageColor(owner,prog){if(!owner||prog<=0)return NEU;if(prog>=NEED)return PCOL[owner];return mix(NEU,PCOL[owner],0.2+0.62*(prog/NEED));}
 
 function padSize(){if(MODE==='h2h')return 112;return Math.round(Math.max(110,Math.min(160,Math.min(W,H)*0.36)));}
 function bottomPads(){return MODE==='pyramid'||MODE==='cpux'||H>W;}
@@ -756,7 +756,8 @@ function cubeImg(style,owner,prog,locked){
  g.save();poly(RF);g.clip();g.fillStyle='rgba(0,0,0,0.18)';for(yy=t+2;yy<t+h+s;yy+=4)g.fillRect(cx,yy,w/2,1);g.restore();
  var fin=owner&&prog>=NEED,top=stageColor(owner,prog);
  poly(TOP);g.fillStyle=top;g.fill();
- k=0.56;poly([cx,t+h*(1-k)/2,cx+w/2*k,t+h/2,cx,t+h-h*(1-k)/2,cx-w/2*k,t+h/2]);
+ // the dark centre shrinks with each hop, so a cube visibly fills up stage by stage
+ k=fin?0.56:(owner?Math.max(0.2,0.72*(1-prog/NEED)):0.56);poly([cx,t+h*(1-k)/2,cx+w/2*k,t+h/2,cx,t+h-h*(1-k)/2,cx-w/2*k,t+h/2]);
  g.fillStyle=fin?mix(top,'#ffffff',0.35):'#272d7c';g.fill();
  if(owner&&!fin){g.fillStyle=top;for(var d=0;d<prog;d++){g.fillRect(cx-3+(d-(prog-1)/2)*7,t+h/2-1.5,3,3);}}
  if(locked){k=0.28;poly([cx,t+h*(1-k)/2,cx+w/2*k,t+h/2,cx,t+h-h*(1-k)/2,cx-w/2*k,t+h/2]);g.fillStyle='#ffffff';g.fill();}
